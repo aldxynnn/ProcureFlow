@@ -1,0 +1,30 @@
+{
+  "name": "procureflow",
+  "version": "0.1.0",
+  "private": true,
+  "description": "ProcureFlow \u2014 Procurement & Spend Management Platform",
+  "packageManager": "npm@10.9.2",
+  "scripts": {
+    "dev": "docker compose up --build",
+    "dev:down": "docker compose down",
+    "build": "npm run build:api && npm run build:web",
+    "build:api": "npm --workspace apps/api run build",
+    "build:web": "npm --workspace apps/web run build",
+    "test": "npm --workspace apps/api run test && npm --workspace apps/web run test",
+    "test:e2e": "npm --workspace apps/api run test:e2e && npm --workspace apps/web run test:e2e",
+    "lint": "npm run lint:api && npm run lint:web",
+    "lint:api": "npm --workspace apps/api run lint",
+    "lint:web": "npm --workspace apps/web run lint",
+    "typecheck": "npm --workspace apps/api run typecheck && npm --workspace apps/web run typecheck",
+    "format": "prettier --write .",
+    "db:generate": "npm --workspace apps/api run prisma:generate",
+    "db:migrate": "npm --workspace apps/api run prisma:migrate",
+    "db:deploy": "npm --workspace apps/api run prisma:deploy"
+  },
+  "devDependencies": {
+    "prettier": "3.6.2"
+  },
+  "workspaces": [
+    "apps/*"
+  ]
+}

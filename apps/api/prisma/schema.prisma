@@ -1,0 +1,561 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum Role {
+  EMPLOYEE
+  MANAGER
+  PROCUREMENT
+  FINANCE
+  ADMIN
+}
+
+enum PurchaseRequestStatus {
+  DRAFT
+  SUBMITTED
+  PENDING_APPROVAL
+  APPROVED
+  REJECTED
+  CANCELLED
+}
+
+enum ApprovalDecision {
+  APPROVED
+  REJECTED
+}
+
+enum RfqStatus {
+  DRAFT
+  OPEN
+  CLOSED
+  CANCELLED
+}
+
+enum RfqInvitationStatus {
+  INVITED
+  RESPONDED
+  DECLINED
+}
+
+enum QuoteStatus {
+  DRAFT
+  SUBMITTED
+  EXPIRED
+  SELECTED
+  REJECTED
+}
+
+enum PurchaseOrderStatus {
+  DRAFT
+  ISSUED
+  PARTIALLY_RECEIVED
+  FULLY_RECEIVED
+  CLOSED
+  CANCELLED
+}
+
+enum InvoiceStatus {
+  DRAFT
+  SUBMITTED
+  MATCHING
+  VERIFIED
+  DISCREPANCY
+  APPROVED
+  REJECTED
+}
+
+enum MatchResult {
+  NOT_EVALUATED
+  MATCH
+  MINOR_VARIANCE
+  DISCREPANCY
+}
+
+enum NotificationType {
+  APPROVAL_REQUESTED
+  APPROVAL_DECIDED
+  RFQ_DEADLINE
+  INVOICE_DISCREPANCY
+  SYSTEM
+}
+
+model Organization {
+  id          String   @id @default(cuid())
+  name        String
+  slug        String   @unique
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  departments Department[]
+  users       User[]
+  budgets     Budget[]
+  vendors     Vendor[]
+  requests    PurchaseRequest[]
+  rfqs        Rfq[]
+  pos         PurchaseOrder[]
+  invoices    Invoice[]
+  quotes      VendorQuote[]
+  rfqInvitations RfqInvitation[]
+  approvals   Approval[]
+  goodsReceipts GoodsReceipt[]
+  auditLogs   AuditLog[]
+  attachments Attachment[]
+  notifications Notification[]
+
+  @@index([slug])
+}
+
+
+model Permission {
+  id          String @id @default(cuid())
+  code        String @unique
+  description String
+  rolePermissions RolePermission[]
+}
+
+model RolePermission {
+  id           String @id @default(cuid())
+  role         Role
+  permissionId String
+  permission   Permission @relation(fields: [permissionId], references: [id], onDelete: Cascade)
+  @@unique([role, permissionId])
+  @@index([role])
+}
+
+model User {
+  id             String       @id @default(cuid())
+  organizationId String
+  departmentId   String?
+  managerId      String?
+  name           String
+  email          String
+  passwordHash   String
+  role           Role
+  isActive       Boolean      @default(true)
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  department     Department?  @relation(fields: [departmentId], references: [id], onDelete: SetNull)
+  manager        User?        @relation("ManagerReports", fields: [managerId], references: [id], onDelete: SetNull)
+  reports        User[]       @relation("ManagerReports")
+  requests       PurchaseRequest[] @relation("Requester")
+  approvals      Approval[]
+  rfqsCreated    Rfq[] @relation("RfqCreator")
+  quotesCreated  VendorQuote[] @relation("QuoteCreator")
+  posCreated     PurchaseOrder[] @relation("PoCreator")
+  poApprovals    PurchaseOrder[] @relation("PoApprover")
+  invoicesCreated Invoice[] @relation("InvoiceCreator")
+  auditLogs      AuditLog[]
+  notifications  Notification[]
+  refreshTokens  RefreshToken[]
+  attachments Attachment[]
+
+  @@unique([organizationId, email])
+  @@index([organizationId, role])
+  @@index([organizationId, managerId])
+}
+
+model RefreshToken {
+  id         String   @id @default(cuid())
+  userId     String
+  tokenHash  String   @unique
+  expiresAt  DateTime
+  revokedAt  DateTime?
+  createdAt  DateTime @default(now())
+  user       User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  @@index([userId, expiresAt])
+}
+
+model Department {
+  id             String @id @default(cuid())
+  organizationId String
+  name           String
+  code           String
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  users          User[]
+  budgets        Budget[]
+  requests       PurchaseRequest[]
+  @@unique([organizationId, code])
+  @@index([organizationId, name])
+}
+
+model Budget {
+  id             String @id @default(cuid())
+  organizationId String
+  departmentId   String?
+  name           String
+  fiscalYear     Int
+  allocatedCents BigInt
+  committedCents BigInt @default(0)
+  verifiedCents  BigInt @default(0)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  department Department? @relation(fields: [departmentId], references: [id], onDelete: SetNull)
+  requests PurchaseRequest[]
+  invoices Invoice[]
+  @@unique([organizationId, name, fiscalYear])
+  @@index([organizationId, fiscalYear])
+}
+
+model Vendor {
+  id             String @id @default(cuid())
+  organizationId String
+  legalName      String
+  displayName    String
+  taxId          String?
+  email          String?
+  phone          String?
+  address        String?
+  isActive       Boolean @default(true)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  contacts VendorContact[]
+  quotes VendorQuote[]
+  pos PurchaseOrder[]
+  rfqInvitations RfqInvitation[]
+  invoices Invoice[]
+  @@unique([organizationId, legalName])
+  @@index([organizationId, displayName])
+}
+
+model VendorContact {
+  id        String @id @default(cuid())
+  vendorId  String
+  name      String
+  email     String?
+  phone     String?
+  roleTitle String?
+  createdAt DateTime @default(now())
+  vendor Vendor @relation(fields: [vendorId], references: [id], onDelete: Cascade)
+  @@index([vendorId])
+}
+
+model PurchaseRequest {
+  id             String @id @default(cuid())
+  organizationId String
+  departmentId   String
+  budgetId       String?
+  requesterId    String
+  title          String
+  justification  String
+  neededBy      DateTime?
+  status         PurchaseRequestStatus @default(DRAFT)
+  rejectionReason String?
+  submittedAt   DateTime?
+  approvedAt    DateTime?
+  rejectedAt    DateTime?
+  cancelledAt   DateTime?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  department Department @relation(fields: [departmentId], references: [id])
+  budget Budget? @relation(fields: [budgetId], references: [id], onDelete: SetNull)
+  requester User @relation("Requester", fields: [requesterId], references: [id])
+  items PurchaseRequestItem[]
+  approvals Approval[]
+  rfqs Rfq[]
+  @@index([organizationId, status, createdAt])
+  @@index([organizationId, requesterId, createdAt])
+}
+
+model PurchaseRequestItem {
+  id              String @id @default(cuid())
+  purchaseRequestId String
+  description     String
+  unit            String
+  quantity        Decimal @db.Decimal(18,4)
+  estimatedUnitPriceCents BigInt
+  notes           String?
+  createdAt       DateTime @default(now())
+  purchaseRequest PurchaseRequest @relation(fields: [purchaseRequestId], references: [id], onDelete: Cascade)
+  rfqItems RfqItem[]
+  quoteItems VendorQuoteItem[]
+  poItems PurchaseOrderItem[]
+  invoiceItems InvoiceItem[]
+  @@index([purchaseRequestId])
+}
+
+model Approval {
+  id          String @id @default(cuid())
+  organizationId String
+  purchaseRequestId String
+  approverId  String
+  decision    ApprovalDecision
+  comment     String?
+  decidedAt   DateTime @default(now())
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  purchaseRequest PurchaseRequest @relation(fields: [purchaseRequestId], references: [id], onDelete: Cascade)
+  approver User @relation(fields: [approverId], references: [id])
+  @@index([organizationId, purchaseRequestId, decidedAt])
+}
+
+model Rfq {
+  id             String @id @default(cuid())
+  organizationId String
+  purchaseRequestId String
+  createdById    String
+  number         String
+  title          String
+  status         RfqStatus @default(DRAFT)
+  responseDeadline DateTime?
+  openedAt       DateTime?
+  closedAt       DateTime?
+  selectedQuoteId String?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  purchaseRequest PurchaseRequest @relation(fields: [purchaseRequestId], references: [id])
+  createdBy User @relation("RfqCreator", fields: [createdById], references: [id])
+  items RfqItem[]
+  quotes VendorQuote[]
+  invitations RfqInvitation[]
+  @@unique([organizationId, number])
+  @@index([organizationId, status, responseDeadline])
+}
+
+model RfqItem {
+  id              String @id @default(cuid())
+  rfqId           String
+  purchaseRequestItemId String
+  description     String
+  unit            String
+  quantity        Decimal @db.Decimal(18,4)
+  rfq Rfq @relation(fields: [rfqId], references: [id], onDelete: Cascade)
+  purchaseRequestItem PurchaseRequestItem @relation(fields: [purchaseRequestItemId], references: [id])
+  quoteItems VendorQuoteItem[]
+  @@unique([rfqId, purchaseRequestItemId])
+}
+
+model RfqInvitation {
+  id             String @id @default(cuid())
+  organizationId String
+  rfqId          String
+  vendorId       String
+  status         RfqInvitationStatus @default(INVITED)
+  invitedAt      DateTime @default(now())
+  respondedAt    DateTime?
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  rfq Rfq @relation(fields: [rfqId], references: [id], onDelete: Cascade)
+  vendor Vendor @relation(fields: [vendorId], references: [id], onDelete: Cascade)
+  @@unique([rfqId, vendorId])
+  @@index([organizationId, rfqId, status])
+}
+
+model VendorQuote {
+  id             String @id @default(cuid())
+  organizationId String
+  rfqId          String
+  vendorId       String
+  createdById    String
+  referenceNumber String
+  status         QuoteStatus @default(DRAFT)
+  leadTimeDays   Int?
+  paymentTerms   String?
+  validUntil     DateTime?
+  notes          String?
+  subtotalCents  BigInt @default(0)
+  taxCents       BigInt @default(0)
+  totalCents     BigInt @default(0)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  rfq Rfq @relation(fields: [rfqId], references: [id], onDelete: Cascade)
+  vendor Vendor @relation(fields: [vendorId], references: [id])
+  createdBy User @relation("QuoteCreator", fields: [createdById], references: [id])
+  items VendorQuoteItem[]
+  purchaseOrders PurchaseOrder[]
+  @@unique([organizationId, referenceNumber])
+  @@unique([rfqId, vendorId])
+  @@index([organizationId, rfqId, vendorId])
+}
+
+model VendorQuoteItem {
+  id              String @id @default(cuid())
+  vendorQuoteId   String
+  rfqItemId       String
+  purchaseRequestItemId String?
+  description     String
+  unit            String
+  quantity        Decimal @db.Decimal(18,4)
+  unitPriceCents  BigInt
+  vendorQuote VendorQuote @relation(fields: [vendorQuoteId], references: [id], onDelete: Cascade)
+  rfqItem RfqItem @relation(fields: [rfqItemId], references: [id])
+  purchaseRequestItem PurchaseRequestItem? @relation(fields: [purchaseRequestItemId], references: [id], onDelete: SetNull)
+  poItems PurchaseOrderItem[]
+  @@unique([vendorQuoteId, rfqItemId])
+}
+
+model PurchaseOrder {
+  id             String @id @default(cuid())
+  organizationId String
+  vendorId       String
+  sourceQuoteId  String?
+  createdById    String
+  number         String
+  status         PurchaseOrderStatus @default(DRAFT)
+  subtotalCents  BigInt @default(0)
+  taxCents       BigInt @default(0)
+  totalCents     BigInt @default(0)
+  issuedAt       DateTime?
+  approvedAt     DateTime?
+  approvedById   String?
+  closedAt       DateTime?
+  cancelledAt    DateTime?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  vendor Vendor @relation(fields: [vendorId], references: [id])
+  sourceQuote VendorQuote? @relation(fields: [sourceQuoteId], references: [id], onDelete: SetNull)
+  createdBy User @relation("PoCreator", fields: [createdById], references: [id])
+  approvedBy User? @relation("PoApprover", fields: [approvedById], references: [id], onDelete: SetNull)
+  items PurchaseOrderItem[]
+  receipts GoodsReceipt[]
+  invoices Invoice[]
+  @@unique([organizationId, number])
+  @@unique([organizationId, sourceQuoteId])
+  @@index([organizationId, status, createdAt])
+}
+
+model PurchaseOrderItem {
+  id                String @id @default(cuid())
+  purchaseOrderId   String
+  purchaseRequestItemId String?
+  vendorQuoteItemId String?
+  description       String
+  unit              String
+  quantityOrdered   Decimal @db.Decimal(18,4)
+  unitPriceCents    BigInt
+  quantityReceived  Decimal @db.Decimal(18,4) @default(0)
+  purchaseOrder PurchaseOrder @relation(fields: [purchaseOrderId], references: [id], onDelete: Cascade)
+  purchaseRequestItem PurchaseRequestItem? @relation(fields: [purchaseRequestItemId], references: [id], onDelete: SetNull)
+  vendorQuoteItem VendorQuoteItem? @relation(fields: [vendorQuoteItemId], references: [id], onDelete: SetNull)
+  receiptItems ReceiptItem[]
+  invoiceItems InvoiceItem[]
+  @@index([purchaseOrderId])
+}
+
+model GoodsReceipt {
+  id             String @id @default(cuid())
+  organizationId String
+  purchaseOrderId String
+  receiptNumber  String
+  receivedAt     DateTime @default(now())
+  note           String?
+  createdAt      DateTime @default(now())
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  purchaseOrder PurchaseOrder @relation(fields: [purchaseOrderId], references: [id], onDelete: Cascade)
+  items ReceiptItem[]
+  @@unique([organizationId, receiptNumber])
+  @@index([organizationId, purchaseOrderId, receivedAt])
+}
+
+model ReceiptItem {
+  id                String @id @default(cuid())
+  goodsReceiptId    String
+  purchaseOrderItemId String
+  quantityReceived  Decimal @db.Decimal(18,4)
+  goodsReceipt GoodsReceipt @relation(fields: [goodsReceiptId], references: [id], onDelete: Cascade)
+  purchaseOrderItem PurchaseOrderItem @relation(fields: [purchaseOrderItemId], references: [id])
+}
+
+model Invoice {
+  id             String @id @default(cuid())
+  organizationId String
+  vendorId       String
+  purchaseOrderId String
+  budgetId       String?
+  createdById    String
+  invoiceNumber  String
+  invoiceDate    DateTime
+  status         InvoiceStatus @default(DRAFT)
+  matchResult    MatchResult @default(NOT_EVALUATED)
+  subtotalCents  BigInt @default(0)
+  taxCents       BigInt @default(0)
+  totalCents     BigInt @default(0)
+  matchingNotes  String?
+  rejectionReason String?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+  submittedAt   DateTime?
+  verifiedAt    DateTime?
+  approvedAt    DateTime?
+  rejectedAt    DateTime?
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  vendor Vendor @relation(fields: [vendorId], references: [id])
+  purchaseOrder PurchaseOrder @relation(fields: [purchaseOrderId], references: [id])
+  budget Budget? @relation(fields: [budgetId], references: [id], onDelete: SetNull)
+  createdBy User @relation("InvoiceCreator", fields: [createdById], references: [id])
+  items InvoiceItem[]
+  @@unique([organizationId, vendorId, invoiceNumber])
+  @@index([organizationId, status, createdAt])
+  @@index([organizationId, purchaseOrderId])
+}
+
+model InvoiceItem {
+  id                String @id @default(cuid())
+  invoiceId         String
+  purchaseOrderItemId String?
+  purchaseRequestItemId String?
+  description       String
+  unit              String
+  quantityInvoiced  Decimal @db.Decimal(18,4)
+  unitPriceCents    BigInt
+  invoice Invoice @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+  purchaseOrderItem PurchaseOrderItem? @relation(fields: [purchaseOrderItemId], references: [id], onDelete: SetNull)
+  purchaseRequestItem PurchaseRequestItem? @relation(fields: [purchaseRequestItemId], references: [id], onDelete: SetNull)
+}
+
+model Attachment {
+  id             String @id @default(cuid())
+  organizationId String
+  entityType     String
+  entityId       String
+  objectKey      String
+  originalName   String
+  contentType    String
+  sizeBytes      BigInt
+  createdById    String
+  createdAt      DateTime @default(now())
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  createdBy User @relation(fields: [createdById], references: [id])
+  @@index([organizationId, entityType, entityId])
+}
+
+model Notification {
+  id             String @id @default(cuid())
+  organizationId String
+  userId         String
+  type           NotificationType
+  title          String
+  body           String
+  readAt         DateTime?
+  createdAt      DateTime @default(now())
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  @@index([organizationId, userId, readAt, createdAt])
+}
+
+model AuditLog {
+  id             String @id @default(cuid())
+  organizationId String
+  actorId        String?
+  action         String
+  entityType     String
+  entityId       String
+  oldValueJson   Json?
+  newValueJson   Json?
+  metadataJson   Json?
+  createdAt      DateTime @default(now())
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  actor User? @relation(fields: [actorId], references: [id], onDelete: SetNull)
+  @@index([organizationId, entityType, entityId, createdAt])
+  @@index([organizationId, actorId, createdAt])
+}
