@@ -21,7 +21,6 @@ async function bootstrap() {
 
   const swaggerConfig = new DocumentBuilder().setTitle('ProcureFlow API').setDescription('Procurement & Spend Management Platform API').setVersion('0.1.0').addBearerAuth().build();
   SwaggerModule.setup('docs', app, SwaggerModule.createDocument(app, swaggerConfig), { swaggerOptions: { persistAuthorization: true } });
-  app.getHttpAdapter().get('/health', (_req, res) => res.json({ status: 'ok', service: 'procureflow-api', timestamp: new Date().toISOString() }));
   const port = Number(config.get<string>('API_PORT') ?? '4000');
   if (!Number.isInteger(port) || port <= 0 || port > 65535) throw new Error('API_PORT must be a valid TCP port');
   await app.listen(port);

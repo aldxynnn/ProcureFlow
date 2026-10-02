@@ -17,6 +17,7 @@ import { AttachmentsModule } from './modules/attachments/attachments.module';
 import { JobsModule } from './modules/jobs/jobs.module';
 import { OrganizationsModule } from './modules/organizations/organizations.module';
 import { SetupModule } from './modules/setup/setup.module';
+import { HealthController } from './health.controller';
 
 @Module({
   imports: [
@@ -41,5 +42,14 @@ import { SetupModule } from './modules/setup/setup.module';
     OrganizationsModule,
     SetupModule
   ]
+})
+@Module({
+  imports: [
+    ConfigModule.forRoot({ isGlobal: true }),
+    CoreModule,
+    // ...
+    SetupModule,
+  ],
+  controllers: [HealthController],
 })
 export class AppModule {}
